@@ -1,0 +1,208 @@
+#!/bin/sh
+#
+# Start shellcloud jobs
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+SHC_LIB="$SHC_HOME/lib"
+
+# check hosts file
+SHC_HOSTS="$SHC_HOME/conf/shellcloud.hosts"
+if [ ! -f "$SHC_HOSTS" ]; then
+  echo "Missing hosts file: '$SHC_HOSTS'"
+  exit 2
+fi
+
+# check agent file
+SHC_AGENT="$SHC_HOME/lib/shellcloud.agent"
+if [ ! -f "$SHC_AGENT" ]; then
+  echo "Missing agent file: '$SHC_AGENT'"
+  exit 3
+fi
+
+# validate input arguments
+syntax() {
+  echo "Syntax: $(basename $0) {-s|-r} [@HOST] JOB_ID JOB_DIR JOB_RUN [JOB_ARG...]
+
+Starts new shellcloud process under specified job id.
+
+Connection options:
+
+  -s - Connect via SSH with key authentication.
+  -r - Connect via RSH with host authentication.
+
+Command options:
+
+  HOST    - Host to start the job at or random host, if ommited.
+  JOB_ID  - Job ID that identifies new or existing shellcloud job.
+  JOB_DIR - Job directory with job script and all required data.
+  JOB_RUN - Job executable script relative to the job directory.
+  JOB_ARG - Lis of arguments that you want to pass to the script."
+}
+
+# verify number of params
+if [ $# -lt 4 ]; then
+  syntax
+  exit 4
+fi
+
+# read connection option
+case "$1" in
+  -s) PROTOCOL=ssh;;
+  -r) PROTOCOL=rsh;;
+  *) syntax; exit 3;;
+esac
+shift 1
+
+# verify input params
+if [ -z "$PROTOCOL" ]; then
+  syntax
+  exit 5
+fi
+
+# read host argument, if present
+echo $1 | egrep '^@' > /dev/null
+if [ $? = 0 ]; then
+  HOST=$(echo $1 | cut -c2-)
+  shift 1
+fi
+
+# get the rest of arguments
+JOB_ID=$1
+JOB_DIR=$2
+JOB_RUN=$3
+shift 3
+JOB_ARG=$@
+
+if [ ! -d "$JOB_DIR" ]; then
+  echo "Unable to locate job directory '$JOB_DIR'."
+  exit 6
+elif [ ! -f "$JOB_DIR/$JOB_RUN" ]; then
+  echo "Unable to locate job executable '$JOB_DIR/$JOB_RUN'."
+  exit 7
+fi
+
+remote_cleanup() {
+  if [ ! -z "$REMOTE_DIR" ]; then
+    if [ "$PROTOCOL" = "ssh" ]; then
+      ssh -o BatchMode=yes $HOST rm -rf "$REMOTE_DIR" > /dev/null 2>&1
+    elif [ "$PROTOCOL" = "rsh" ]; then
+      rsh $HOST rm -rf "$REMOTE_DIR" > /dev/null 2>&1
+    fi
+  fi
+}
+
+local_cleanup() {
+  if [ -d "$SHC_TEMP" ]; then
+    rm -rf "$SHC_TEMP"
+  fi
+}
+
+cleanup_all() {
+  remote_cleanup
+  local_cleanup
+}
+
+trap cleanup_all INT TERM HUP
+
+# create temp folder
+if [ -d /run/shm ]; then
+  SHC_TEMP=$(mktemp -d --tmpdir=/run/shm shellcloud-XXXXXXXX)
+else
+  SHC_TEMP=$(mktemp -d --tmpdir shellcloud-XXXXXXXX)
+fi
+
+# create randomized hosts file or us user host if provided
+USER_HOSTS="$SHC_TEMP/shellcloud.hosts"
+if [ -z "$HOST" ]; then
+  grep -E -v '^#|^[[:space:]]*$' "$SHC_HOSTS" | shuf > "$USER_HOSTS"
+else
+  echo $HOST > "$USER_HOSTS"
+fi
+if [ $? != 0 ]; then
+  echo "Failed to create user hosts file."
+  exit 3
+fi
+
+# start job on one remote host
+while read HOST
+do
+  # reprt status
+  echo -n "Starting: host=$HOST job=$JOB_ID cmd=$JOB_RUN $JOB_ARG "
+
+  # make tmp dir cmd
+  MK_TEMPDIR_CMD='
+    if [ -d /run/shm ]; then
+      SHC_TEMP=$(mktemp -d --tmpdir=/run/shm shellcloud-XXXXXXXX)
+    else
+      SHC_TEMP=$(mktemp -d --tmpdir shellcloud-XXXXXXXX)
+    fi
+    if [ $? = 0 ]; then
+        mkdir "$SHC_TEMP/job"
+    fi
+    echo $SHC_TEMP # output temp dir name for client REMOTE_DIR
+  '
+
+  # create temp job folder on the remote host
+  if [ "$PROTOCOL" = "ssh" ]; then
+    REMOTE_DIR=$(ssh -o BatchMode=yes $HOST sh "$MK_TEMPDIR_CMD") 2> /dev/null
+  elif [ "$PROTOCOL" = "rsh" ]; then
+    REMOTE_DIR=$(rsh $HOST sh "$MK_TEMPDIR_CMD") 2> /dev/null
+  fi
+  RET=$?
+  if [ $RET != 0 ]; then
+    echo "[temp error] ($RET)"
+    remote_cleanup
+    continue; # try another host
+  fi
+
+  # copy agent script and job dir to remote host
+  if [ "$PROTOCOL" = "ssh" ]; then
+    scp -o BatchMode=yes "$SHC_AGENT" "$HOST:$REMOTE_DIR" > /dev/null 2>&1
+    scp -r -o BatchMode=yes "$JOB_DIR/"* "$HOST:$REMOTE_DIR/job" > /dev/null 2>&1
+  elif [ "$PROTOCOL" = "rsh" ]; then
+    rcp "$SHC_AGENT" "$HOST:$REMOTE_DIR" > /dev/null 2>&1
+    rcp -r "$JOB_DIR/"* "$HOST:$REMOTE_DIR/job" > /dev/null 2>&1
+  fi
+  RET=$?
+  if [ $RET != 0 ]; then
+    echo "[copy error] ($RET)"
+    remote_cleanup
+    continue; # try another host
+  fi
+
+  # run job cmd
+  AGENT_NAME=$(basename "$SHC_AGENT")
+  RUN_JOB_CMD='
+    cd "'$REMOTE_DIR'"
+    export SHC_HOST='$HOST'
+    nohup setsid sh '$AGENT_NAME' '$JOB_ID' '$JOB_RUN' '$JOB_ARG' \
+    > /dev/null 2>&1 < /dev/null &
+  '
+
+  # execute remote job script in backgrund
+  if [ "$PROTOCOL" = "ssh" ]; then
+    ssh -o BatchMode=yes $HOST "$RUN_JOB_CMD"
+  elif [ "$PROTOCOL" = "rsh" ]; then
+    rsh $HOST "$RUN_JOB_CMD"
+  fi
+  RET=$?
+  if [ $RET != 0 ]; then
+    echo "[exec error] ($RET)"
+    remote_cleanup
+    continue; # try another host
+  fi
+
+  # success
+  echo "OK"
+  break
+
+done < "$USER_HOSTS"
+
+# clean up
+local_cleanup
+
+# exit with RET
+exit $RET

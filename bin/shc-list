@@ -1,0 +1,114 @@
+#!/bin/sh
+#
+# List shellcloud jobs
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+
+# check hosts file
+SHC_HOSTS="$SHC_HOME/conf/shellcloud.hosts"
+if [ ! -f "$SHC_HOSTS" ]; then
+  echo "Missing hosts file: '$SHC_HOSTS'"
+  exit 2
+fi
+
+# show script syntax
+syntax() {
+  echo "Syntax: $(basename $0) {-s|-r} {-j [JOB_ID]|-h}
+
+  List shellcloud jobs or hosts.
+
+Connection options:
+
+  -s - Connect via SSH with key authentication.
+  -r - Connect via RSH with host authentication.
+
+Command options:
+
+  -h        - List hosts as defined in configuration file.
+  -j JOB_ID - List jobs matching JOB_ID, or all jobs if JOB_ID is empty."
+}
+
+# process options
+while getopts srhj opt
+do
+  case $opt in
+    s) PROTOCOL=ssh;;
+    r) PROTOCOL=rsh;;
+    h) COMMAND=hosts;;
+    j) COMMAND=jobs
+      # read optional JOB_ID
+      OUT_OPTIND=$OPTIND
+      OPTIND=$((OPTIND-1))
+      while getopts j: jopt
+      do
+        case $jopt in 
+          j) JOB_ID=$OPTARG; OUT_OPTIND=$((OUT_OPTIND+1));;
+        esac
+      done 2> /dev/null
+      OPTIND=$OUT_OPTIND;;
+    *) syntax; exit 4;;
+  esac
+done
+
+# validate input
+if [ -z "$COMMAND" ] || [ -z "$PROTOCOL" ]; then
+  syntax
+  return 5
+fi
+
+# define host filter
+HOST_FILTER='^#|^[[:space:]]*$'
+
+# list remote jobs
+list_jobs() {
+  # set list options according to pgrep version
+  # pgrep 3.3.4
+  #"pgrep -a -f '^sh shellcloud.agent $JOB_ID'"
+  # pgrep 3.3.3
+  #"pgrep -l -f '^sh shellcloud.agent $JOB_ID'"
+  local FIND_PID_CMD='
+    version_ge() { test "$(echo "$@"|tr " " "\n"|sort -V|tail -n 1)" == "$1"; }
+    ver=$(pgrep --version | awk "{print \$4}")
+    if version_ge "$ver" "3.3.4"; then
+      pgrep -a -f "'"^sh shellcloud.agent $JOB_ID"'"
+    else
+      pgrep -l -f "'"^sh shellcloud.agent $JOB_ID"'"
+    fi
+  '
+
+  if [ "$PROTOCOL" = "ssh" ]; then
+    ssh -o BatchMode=yes $HOST "$FIND_PID_CMD"
+  elif [ "$PROTOCOL" = "rsh" ]; then
+    rsh $HOST "$FIND_PID_CMD"
+  fi
+}
+
+if [ $COMMAND = "jobs" ]; then
+  # open dedicated FD to list jobs (SSH closes default stdin and loop breaks)
+  exec 5<&0
+
+  # find jobs on remote host
+  grep -E -v $HOST_FILTER "$SHC_HOSTS" | while read HOST
+  do
+    # get remote pids
+    list_jobs <&5 | while read JOB_PID JOB_NAME
+    do
+      JOB_ID=$(echo $JOB_NAME | awk '{print $3}')
+      JOB_CMD=$(echo $JOB_NAME | \
+          awk '{print substr($0, length($1)+length($2)+length($3)+4)}')
+      echo "Running: job=$JOB_ID host=$HOST pid=$JOB_PID cmd=$JOB_CMD"
+    done
+  done
+
+  # close dedicated FD
+  exec 5<&-
+
+elif [ $COMMAND = "hosts" ]; then
+
+  # list all hosts
+  grep -E -v $HOST_FILTER "$SHC_HOSTS"
+
+fi

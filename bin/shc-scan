@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# Scan shellcloud hosts
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+
+# validate input arguments
+syntax() {
+echo "Syntax: $(basename $0) {-s|-r} <NETWORK>/<NETMASK>
+
+Scan network and list SSH or RSH enabled hosts.
+
+Options:
+
+  -s      - Search for SSH enabled hosts.
+  -r      - Search for RSH enabled hosts.
+  NETWORK - Network address to scan.
+  NETMASK  - Network prefix to limit IP address range."
+}
+
+# read input params
+while getopts s:r: opt
+do
+  case $opt in
+    s) PROTOCOL=ssh; NETWORK=$OPTARG;;
+    r) PROTOCOL=rsh; NETWORK=$OPTARG;;
+    *) syntax; exit 4;;
+  esac
+done
+
+# validate input
+if [ -z "$NETWORK" ] || [ -z "$PROTOCOL" ]; then
+  syntax
+  return 5
+fi
+
+# check for nmap
+COMMAND=$(which nmap)
+if [ $? != 0 ]; then
+  echo "nmap missing on PATH or not installed"
+  exit 3
+fi
+
+# do the scan
+if [ "$PROTOCOL" = "ssh" ]; then
+  nmap -sT -p 22 --open $NETWORK
+elif [ "$PROTOCOL" = "rsh" ]; then
+  nmap -sT -p 514 --open $NETWORK
+fi

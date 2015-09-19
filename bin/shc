@@ -1,0 +1,54 @@
+#!/bin/sh
+#
+# Shellcloud master script
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+SHC_NAME=$(basename $0)
+
+help() {
+  echo "Syntax: $SHC_NAME COMMAND [OPTIONS...]
+
+Shellcloud creates and controls distributed jobs via SSH or RSH. 
+For information on specific commands type $SHC_NAME help COMMAND.
+
+Commands:
+
+  list  - List jobs and their processes.
+  start - Start new process within specified job.
+  stop  - Stop processes within specified job.
+  stat  - Check environnment and hosts status.
+  scan  - Search network for SSH/RSH enabled hosts.
+  help  - Print help about specified command."
+}
+
+# validate input arguments
+if [ $# -lt 1 ]; then
+  help
+  exit 3
+fi
+
+COMMAND=$1
+shift 1
+OPTIONS=$@
+
+case $COMMAND in
+  help )
+    case $1 in
+      stat | list | scan | start | stop  )
+        "$SHC_BIN/$SHC_NAME-$1"
+      ;;
+      * )
+        help
+      ;;
+    esac
+  ;;
+  stat | list | scan | start | stop  )
+    "$SHC_BIN/$SHC_NAME-$COMMAND" "$@"
+  ;;
+  * )
+    help
+  ;;
+esac

@@ -1,0 +1,127 @@
+#!/bin/sh
+#
+# Check shellcloud environment status
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+
+# check hosts file
+SHC_HOSTS="$SHC_HOME/conf/shellcloud.hosts"
+if [ ! -f "$SHC_HOSTS" ]; then
+  echo "Missing hosts file: '$SHC_HOSTS'"
+  exit 2
+fi
+
+syntax() {
+  echo "Syntax: $(basename $0) -e|-h|-a
+
+  Check environnment and hosts status.
+
+Options:
+
+  -e - Check environment setup.
+  -h - Check hosts availability.
+  -a - Check all of the above."
+}
+
+# read input params
+# process options
+while getopts eha opt
+do
+  case $opt in
+    e) CHECK=setup;;
+    h) CHECK=hosts;;
+    a) CHECK=all;;
+  esac
+done
+
+check_command() {
+  local NAME=$1  
+  local COMMAND=$(which $NAME)
+  if [ -f "$COMMAND" ]; then
+    echo -n "OK - "
+    INFO="present at $COMMAND"
+  else
+    echo -n "ERROR - "
+    INFO="missing on PATH"
+  fi
+  echo "$NAME $INFO"
+}
+
+check_host() {
+  local COOKIE='1234567890'
+  local TIMEOUT=5
+  nc -w $TIMEOUT -z $HOST 22
+  if [ $? = 0 ]; then
+    local ANSWER="$(ssh -o BatchMode=yes -o ConnectTimeout=5 $HOST echo $COOKIE 2>&1)"; RET=$?
+    if [ $RET != 0 ] || [ "$ANSWER" != "$COOKIE" ]; then
+      echo "ERROR - host $HOST not accessible via SSH with key authentication"
+    else
+      echo "OK - host $HOST accessible via SSH with key authentication"
+    fi
+  else
+      echo "ERROR - host $HOST not accessible via SSH"
+  fi
+  nc -w $TIMEOUT -z $HOST 514
+  if [ $? = 0 ]; then
+    ANSWER="$(rsh $HOST echo $COOKIE 2>&1)"; RET=$?
+    if [ $RET != 0 ] || [ "$ANSWER" != "$COOKIE" ]; then
+      echo "ERROR - host $HOST not accessible via RSH with host authentication"
+    else
+      echo "OK - host $HOST accessible via RSH with host authentication"
+    fi
+  else
+      echo "ERROR - host $HOST not accessible via RSH"
+  fi
+}
+
+# check commands
+check_setup() {
+  check_command nmap
+  check_command ssh
+  check_command rsh
+  check_command rcp
+  check_command nc
+  check_command awk
+  check_command base64
+}
+
+# check hosts
+check_hosts() {
+  # open dedicated FD to list jobs (SSH closes default stdin and loop breaks)
+  exec 5<&0
+
+  grep -E -v '^#|^[[:space:]]*$' "$SHC_HOSTS" | while read HOST
+  do
+    check_host $HOST <&5
+  done
+
+  # close dedicated FD
+  exec 5<&-
+}
+
+# validate input arguments
+if [ $# -ne 1 ]; then
+  syntax
+  exit 3
+fi
+
+case $CHECK in
+  setup)
+    check_setup
+  ;;
+  hosts)
+    check_hosts
+  ;;
+  all)    
+    check_setup
+    check_hosts
+  ;;
+  *)
+    syntax
+    exit 4
+  ;;
+esac
+

@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Shellcloud process agent
+#
+
+# get process folder
+SHC_DIR=$PWD
+
+# cleanup routine
+cleanup() {
+  # got to parent dir
+  cd $(dirname "$SHC_DIR")
+
+  # delete job folder
+  rm -rf "$SHC_DIR"
+}
+
+# shellcloud master can send us TERM
+trap cleanup TERM INT HUP
+
+# go to job subfolder
+cd job
+if [ $? != 0 ]; then
+  cleanup
+  exit 1
+fi
+
+# read master arguments
+SHC_JOB=$1
+SHC_RUN=$2
+shift 2
+
+# run user job with arguments
+nice sh "$SHC_RUN" $@
+
+# clean up
+cleanup

@@ -1,0 +1,101 @@
+#!/bin/sh
+#
+# Stop shellcloud jobs
+#
+
+# load settings
+SHC_BIN=$(dirname "$0")
+SHC_HOME=$(dirname "$SHC_BIN")
+
+# check hosts file
+SHC_HOSTS="$SHC_HOME/conf/shellcloud.hosts"
+if [ ! -f "$SHC_HOSTS" ]; then
+  echo "Missing hosts file: '$SHC_HOSTS'"
+  exit 1
+fi
+
+# show script syntax
+syntax() {
+  echo "Syntax: $(basename $0) {-s|-r} <JOB_ID>
+
+  Stop shellcloud jobs matching provided job id.
+
+Connection options:
+
+  -s - Connect via SSH with key authentication.
+  -r - Connect via RSH with host authentication.
+
+Command options:
+
+  JOB_ID - Stop jobs matching JOB_ID."
+}
+
+# read input params
+while getopts s:r: opt
+do
+  case $opt in
+    s) PROTOCOL=ssh; JOB_ID=$OPTARG;;
+    r) PROTOCOL=rsh; JOB_ID=$OPTARG;;
+    *) syntax; exit 4;;
+  esac
+done
+
+# verify input params
+if [ -z "$PROTOCOL" ]; then
+  syntax
+  exit 5
+fi
+
+# define host filter
+HOST_FILTER='^#|^[[:space:]]*$'
+
+# stop remote jobs
+stop_jobs() {
+  # define stop job command
+  STOP_JOB_CMD='
+    HOST='$HOST'
+    JOB_ID='$JOB_ID'
+    pgrep -f "^sh shellcloud.agent $JOB_ID" | { 
+      while read JOB_PID
+      do
+        echo -n "Stopping: job=$JOB_ID host=$HOST pid=$JOB_PID "
+        JOB_GID=$(ps -o pgid= $JOB_PID | awk "{print \$1}")
+        kill -TERM -$JOB_GID > /dev/null 2>&1
+        RET=$?
+        if [ $RET = 0 ]; then
+          echo "OK"
+        else
+          echo "($RET)"
+        fi
+      done
+    }
+  '
+
+  # run stop command on host
+  if [ "$PROTOCOL" = "ssh" ]; then
+    ssh -o BatchMode=yes $HOST "$STOP_JOB_CMD"
+  elif [ "$PROTOCOL" = "rsh" ]; then
+    rsh $HOST "$STOP_JOB_CMD"
+  fi
+}
+
+# open dedicated FD to stop jobs (SSH closes default stdin and loop breaks)
+exec 5<&0
+
+# stop jobs on remote host
+grep -E -v $HOST_FILTER "$SHC_HOSTS" | while read HOST
+do
+
+  stop_jobs <&5
+  RET=$?
+
+  # output local error
+  if [ $RET != 0 ]; then
+    echo "Stopping: host: $HOST job: $JOB_ID ($RET)"
+  fi
+
+done
+
+# close dedicated FD
+exec 5<&-
+
