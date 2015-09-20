@@ -107,6 +107,12 @@ If there are any running jobs the output would like this:
     Stopping: job=job1 host=node1.seegnify.net pid=21033 OK
     Stopping: job=job1 host=node9.seegnify.net pid=9483 OK
 
+Installation
+------------
+
+Installation is as easy as copying the project files to a desired location and 
+adding Shellcloud 'bin' folder environment variable PATH.
+
 Configuration
 -------------
 
