@@ -111,7 +111,7 @@ Installation
 ------------
 
 Installation is as easy as copying the project files to a desired location and 
-adding Shellcloud 'bin' folder environment variable PATH.
+adding Shellcloud 'bin' folder to the environment variable PATH.
 
 Configuration
 -------------
