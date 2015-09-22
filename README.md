@@ -50,13 +50,18 @@ Content of MyScript.sh:
 
     du -hs /tmp > /nfs/tmp.log
 
+If you needed to run a job that requires an executable, a jar or else, you 
+simply put that executable or jar in MyJob folder and add a command that starts 
+that executable or jar to the script. The content of the job folder will be 
+transferred to a cluster node and executed there.
+
 Running jobs
 ------------
 
 By default each job is executed on a randomly selected node. This can be changed
 by an option on the start command. Each job is added to a logical job id, that
-later is used to identify jobs. The job folder is automatically copied to the 
-remote node, where the job script is then executed.
+later is used to identify jobs, therefore you need to specify a job id when 
+starting a job.
 
 ### Example:
 
@@ -77,7 +82,8 @@ When the command is successful the output would be similar to this.
 
 ## Listing jobs
 
-Job listing shows currently running jobs on the cluster.
+Job listing shows currently running jobs on the cluster. Shellcloud does not 
+persist job information and all listings are transient.
 
 ### Example:
 
