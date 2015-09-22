@@ -50,7 +50,7 @@ Content of MyScript.sh:
 
     du -hs /tmp > /nfs/tmp.log
 
-If you needed to run a job that requires an executable, a jar or else, you 
+If you need to run a job that requires an executable, a jar or else, you 
 simply put that executable or jar in MyJob folder and add a command that starts 
 that executable or jar to the script. The content of the job folder will be 
 transferred to a cluster node and executed there.
