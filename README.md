@@ -55,7 +55,7 @@ simply put that executable or jar in MyJob folder and add a command that starts
 that executable or jar to the script. The content of the job folder will be 
 transferred to a cluster node and executed there.
 
-Running jobs
+Starting jobs
 ------------
 
 By default each job is executed on a randomly selected node. This can be changed
