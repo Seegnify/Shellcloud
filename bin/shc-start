@@ -24,7 +24,7 @@ fi
 
 # validate input arguments
 syntax() {
-  echo "Syntax: $(basename $0) {-s|-r} [@HOST] JOB_ID JOB_DIR JOB_RUN [JOB_ARG...]
+  echo "Syntax: $(basename $0) {-s|-r} [@HOST] JOB_ID JOB_DIR JOB_CMD [JOB_ARG...]
 
 Starts new shellcloud process under specified job id.
 
@@ -38,7 +38,7 @@ Command options:
   HOST    - Host to start the job at or random host, if ommited.
   JOB_ID  - Job ID that identifies new or existing shellcloud job.
   JOB_DIR - Job directory with job script and all required data.
-  JOB_RUN - Job executable script relative to the job directory.
+  JOB_CMD - Job executable command relative to the job directory.
   JOB_ARG - Lis of arguments that you want to pass to the script."
 }
 
@@ -72,15 +72,15 @@ fi
 # get the rest of arguments
 JOB_ID=$1
 JOB_DIR=$2
-JOB_RUN=$3
+JOB_CMD=$3
 shift 3
 JOB_ARG=$@
 
 if [ ! -d "$JOB_DIR" ]; then
   echo "Unable to locate job directory '$JOB_DIR'."
   exit 6
-elif [ ! -f "$JOB_DIR/$JOB_RUN" ]; then
-  echo "Unable to locate job executable '$JOB_DIR/$JOB_RUN'."
+elif [ ! -f "$JOB_DIR/$JOB_CMD" ]; then
+  echo "Unable to locate job executable '$JOB_DIR/$JOB_CMD'."
   exit 7
 fi
 
@@ -130,7 +130,7 @@ fi
 while read HOST
 do
   # reprt status
-  echo -n "Starting: host=$HOST job=$JOB_ID cmd=$JOB_RUN $JOB_ARG "
+  echo -n "Starting: host=$HOST job=$JOB_ID cmd=$JOB_CMD $JOB_ARG "
 
   # make tmp dir cmd
   MK_TEMPDIR_CMD='
@@ -178,7 +178,7 @@ do
   RUN_JOB_CMD='
     cd "'$REMOTE_DIR'"
     export SHC_HOST='$HOST'
-    nohup setsid sh '$AGENT_NAME' '$JOB_ID' '$JOB_RUN' '$JOB_ARG' \
+    nohup setsid sh '$AGENT_NAME' '$JOB_ID' '$JOB_CMD' '$JOB_ARG' \
     > /dev/null 2>&1 < /dev/null &
   '
 

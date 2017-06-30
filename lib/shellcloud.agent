@@ -27,11 +27,11 @@ fi
 
 # read master arguments
 SHC_JOB=$1
-SHC_RUN=$2
+SHC_CMD=$2
 shift 2
 
 # run user job with arguments
-nice sh "$SHC_RUN" $@
+nice sh "$SHC_CMD" $@
 
 # clean up
 cleanup
