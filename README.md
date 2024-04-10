@@ -122,8 +122,8 @@ adding Shellcloud 'bin' folder to the environment variable PATH.
 Configuration
 -------------
 
-The configuration file shellcloud.hosts is located in the conf folder on the 
-control host. It lists Shellcloud enabled nodes by IP address or DNS names (one 
+The configuration file shellcloud.hosts is located in the folder conf on the
+control host. It lists Shellcloud enabled nodes by IP address or DNS names (one
 node per line). Each node needs to be SSH or RSH enabled. To SSH enable a node 
 copy SSH public ID form the control host to the node (usually via ssh-copy-id). 
 To RSH enable a node add the control host IP address to .rhosts file on the 
