@@ -148,6 +148,6 @@ This will list all required tools and will show which nodes are enabled.
     OK - host node9.seegnify.net accessible via SSH with key authentication
     ERROR - host node9.seegnify.net not accessible via RSH with host authentication
 
-Note that each node is listed twice and only one type of authentication is 
-required. Therefore if you see ERROR for RSH and OK for SSH or vice-versa, 
-it is still a good setup.
+Note that each node is listed speratelly for SSH and RSH while only one type of
+authentication is required. Therefore if you see ERROR for RSH and OK for SSH or
+vice-versa, it is still a good setup.
